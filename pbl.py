@@ -2,11 +2,12 @@ import streamlit as st
 import sqlite3
 from hashlib import sha256
 import pandas as pd
-from google import genai
+import google.generativeai as genai
 import os
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="English to SQL Translator", page_icon="📊")
+
 # Custom styling
 st.markdown(
     """
@@ -24,6 +25,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 #############################################
 # 1) USER AUTHENTICATION SETUP              #
 #############################################
@@ -86,7 +88,7 @@ if st.session_state["logged_in"]:
         for key in ["username", "db_schema", "db_path"]:
             if key in st.session_state:
                 del st.session_state[key]
-        st.experimental_rerun()
+        st.rerun()
 
 auth_choice = st.sidebar.selectbox("Choose Authentication", ["Login", "Sign Up"])
 username_input = st.sidebar.text_input("Username", key="username_input")
@@ -276,59 +278,62 @@ if st.session_state["logged_in"]:
         sql_query = sql_query.replace("\t", " ")  # Remove tabs
         return sql_query
 
-
     st.subheader("Enter Your Query")
     english_query = st.text_area("Enter your English query:", height=100)
 
     if st.button("Convert to SQL"):
         if not english_query.strip():
             st.warning("Please enter a query to convert.")
+        elif not selected_table:
+            st.warning("Please select a table first.")
         else:
-            if not selected_table:
-                st.warning("Please select a table first.")
-            else:
-                table_schema = st.session_state[schema_key][selected_table]
-                def generate_sql(nl_query, schema):
-                    prompt = f"""
-                    You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
-                    IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
-                    
-                    Table Schema:
-                    {schema}
-                    
-                    Natural Language Query:
-                    {nl_query}
-                    
-                    SQL Query:
-                    """
-                    try:
-                        client = genai.Client(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")  # Replace with your actual API key
-                        response = client.models.generate_content(
-                            model="gemini-2.0-flash",
-                            contents=prompt
-                        )
-                        return response.text.strip()
-                    except Exception as e:
-                        st.error(f"Error with the model generation: {e}")
-                        return None
+            table_schema = st.session_state[schema_key][selected_table]
+            import google.generativeai as genai
 
-                sql_output = generate_sql(english_query, table_schema)
-                if sql_output:
-                    sql_output = clean_generated_sql(sql_output)
-                    if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
-                        sql_output = sql_output.replace("select", "select distinct", 1)
-                    st.subheader("Generated SQL Query:")
-                    st.code(sql_output)
-                    try:
-                        conn = sqlite3.connect(st.session_state[path_key])
-                        df = pd.read_sql_query(sql_output, conn)
-                        df = df.drop_duplicates()
-                        st.subheader("Query Results:")
-                        st.dataframe(df)
-                        conn.close()
-                    except Exception as e:
-                        st.error(f"Error executing SQL: {e}")
-                else:
-                    st.warning("SQL generation failed. Try again.")
+            def generate_sql(nl_query, schema):
+                prompt = f"""
+You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
+IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
+
+Table Schema:
+{schema}
+
+Natural Language Query:
+{nl_query}
+
+SQL Query:
+"""
+                try:
+                    # Configure the API key for the module
+                    genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
+                    # Call the generation function directly (check the correct function name in the docs)
+                    model=genai.GenerativeModel("gemini-2.0-flash")
+                    response = model.generate_content(prompt)
+                    # Return the generated text (adjust based on the actual response structure)
+                    return response.text.strip()if response and response.text else None
+                except Exception as e:
+                    st.error(f"Error with the model generation: {e}")
+                    return None
+
+            sql_output = generate_sql(english_query, table_schema)
+            if sql_output:
+                sql_output = clean_generated_sql(sql_output)
+                if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
+                    sql_output = sql_output.replace("select", "select distinct", 1)
+                st.subheader("Generated SQL Query:")
+                st.code(sql_output)
+                try:
+                    conn = sqlite3.connect(st.session_state[path_key])
+                    df = pd.read_sql_query(sql_output, conn)
+                    df = df.drop_duplicates()
+                    st.subheader("Query Results:")
+                    st.dataframe(df)
+                    conn.close()
+                except Exception as e:
+                    st.error(f"Error executing SQL: {e}")
+            else:
+                st.warning("SQL generation failed. Try again.")
 else:
     st.info("Please log in to access the application.")
+
+st.markdown("<hr>", unsafe_allow_html=True)
