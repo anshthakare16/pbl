@@ -4,6 +4,13 @@ from hashlib import sha256
 import pandas as pd
 import google.generativeai as genai
 import os
+import subprocess
+# Install google-generativeai if not found
+try:
+    import google.generativeai as genai
+except ModuleNotFoundError:
+    subprocess.run(["pip", "install", "google-generativeai"])
+    import google.generativeai as genai
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="English to SQL Translator", page_icon="📊")
