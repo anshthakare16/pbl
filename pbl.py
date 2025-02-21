@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 from hashlib import sha256
 import pandas as pd
-from google import genai
+from google.genai import genai
 import os
 
 # Set page configuration
