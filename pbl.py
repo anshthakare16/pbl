@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 from hashlib import sha256
 import pandas as pd
-import google.generativeai as genai
+#import google.generativeai as genai
 import os
 import subprocess
 # Install google-generativeai if not found
