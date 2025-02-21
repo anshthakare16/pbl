@@ -1,4 +1,9 @@
-
+import streamlit as st
+import sqlite3
+from hashlib import sha256
+import pandas as pd
+from google import genai
+import os
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="English to SQL Translator", page_icon="📊")
