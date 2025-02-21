@@ -2,7 +2,8 @@ import streamlit as st
 import sqlite3
 from hashlib import sha256
 import pandas as pd
-pip install google-genai
+from google.genai import Client
+
 
 import os
 
