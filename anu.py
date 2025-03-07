@@ -29,7 +29,7 @@ def main():
     
     if st.button("My Wifu 💖"):
         for path in image_paths:
-            st.image(path, caption="Our Memory", use_column_width=True)
+            st.image(path, caption="Our Memory", use_container_width=True)
     
 if __name__ == "__main__":
     main()
