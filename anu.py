@@ -7,9 +7,8 @@ def main():
     st.write("""
     My love,
     
-    You are my everything. Every moment with you is special,
+    I created this website just for you to remind you how much you mean to me. Every moment with you is special,
     and I never want you to feel unimportant. You are the most precious person in my life. ❤️
-    you are most beautiful thing that has ever happend to me.
     """)
     
     st.image("https://source.unsplash.com/800x400/?love,couple", caption="You and Me Forever")
@@ -22,15 +21,15 @@ def main():
     
     st.subheader("📸 Our Beautiful Memories")
     image_paths = [
-        r"C:\Users\ANSH\Desktop\pabli\hmm\IMG-20250307-WA0041.jpg",
-        r"C:\Users\ANSH\Desktop\pabli\hmm\IMG-20250307-WA0042.jpg",
-        r"C:\Users\ANSH\Desktop\pabli\hmm\IMG-20250307-WA0043.jpg",
-        r"C:\Users\ANSH\Desktop\pabli\hmm\IMG-20250307-WA0044.jpg"
+        "https://raw.githubusercontent.com/anshthakare16/pbl/main/IMG-20250307-WA0044.jpg",
+        "https://raw.githubusercontent.com/anshthakare16/pbl/main/IMG-20250307-WA0043.jpg",
+        "https://raw.githubusercontent.com/anshthakare16/pbl/main/IMG-20250307-WA0042.jpg",
+        "https://raw.githubusercontent.com/anshthakare16/pbl/main/IMG-20250307-WA0041.jpg"
     ]
     
     if st.button("My Wifu 💖"):
         for path in image_paths:
-            st.image(path, caption="Our Memory", use_container_width=True)
+            st.image(path, caption="Our Memory", use_column_width=True)
     
 if __name__ == "__main__":
     main()
