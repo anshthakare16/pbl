@@ -519,54 +519,51 @@ if st.session_state["logged_in"]:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown("### 💬 English to SQL Translator")
         st.markdown("Type your question in plain English, and I'll convert it to SQL.")
-        
+
         #############################################
         # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
         #############################################
-            #############################################
-    # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
-    #############################################
-    def clean_generated_sql(sql_query):
-        sql_query = sql_query.strip()
-        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
-        sql_query = sql_query.replace("\n", " ").replace("\t", " ")
-        return sql_query
+        def clean_generated_sql(sql_query):
+            sql_query = sql_query.strip()
+            sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+            sql_query = sql_query.replace("\n", " ").replace("\t", " ")
+            return sql_query
 
-    # Add shared query loading
-    query_params = st.query_params  # Updated: Replaced st.experimental_get_query_params with st.query_params
-    shared_query = query_params.get("query", [None])[0]
+        # Add shared query loading
+        query_params = st.query_params  # Updated: Replaced st.experimental_get_query_params with st.query_params
+        shared_query = query_params.get("query", [None])[0]
 
-    if shared_query:
-        st.markdown("<div class='info-msg'>📌 Loaded shared query from link.</div>", unsafe_allow_html=True)
-        st.text_area("Shared Query", shared_query, height=100, disabled=True)
-        try:
-            conn = sqlite3.connect(st.session_state.get("db_path", ""))
-            df = pd.read_sql_query(shared_query, conn)
-            df = df.drop_duplicates()
-            st.subheader("Shared Query Results:")
-            st.dataframe(df)
-            conn.close()
-        except Exception as e:
-            st.error(f"Error executing shared SQL: {e}")
+        if shared_query:
+            st.markdown("<div class='info-msg'>📌 Loaded shared query from link.</div>", unsafe_allow_html=True)
+            st.text_area("Shared Query", shared_query, height=100, disabled=True)
+            try:
+                conn = sqlite3.connect(st.session_state.get("db_path", ""))
+                df = pd.read_sql_query(shared_query, conn)
+                df = df.drop_duplicates()
+                st.subheader("Shared Query Results:")
+                st.dataframe(df)
+                conn.close()
+            except Exception as e:
+                st.error(f"Error executing shared SQL: {e}")
 
-    english_query = st.text_area("Enter your English query:", 
-                              placeholder="Example: Show me all employees who work in the sales department",
-                              height=100)
+        english_query = st.text_area("Enter your English query:", 
+                                  placeholder="Example: Show me all employees who work in the sales department",
+                                  height=100)
 
-    run_query = st.button("🔍 Convert to SQL", key="run_query_btn")
+        run_query = st.button("🔍 Convert to SQL", key="run_query_btn")
 
-    if run_query:
-        if not english_query.strip():
-            st.warning("Please enter a query to convert.")
-        elif "selected_table" not in st.session_state:
-            st.warning("Please select a table first.")
-        else:
-            selected_table = st.session_state["selected_table"]
-            table_schema = st.session_state[schema_key][selected_table]
+        if run_query:
+            if not english_query.strip():
+                st.warning("Please enter a query to convert.")
+            elif "selected_table" not in st.session_state:
+                st.warning("Please select a table first.")
+            else:
+                selected_table = st.session_state["selected_table"]
+                table_schema = st.session_state[schema_key][selected_table]
 
-            with st.spinner("Converting your query to SQL..."):
-                def generate_sql(nl_query, schema):
-                    prompt = f"""
+                with st.spinner("Converting your query to SQL..."):
+                    def generate_sql(nl_query, schema):
+                        prompt = f"""
 You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
 IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
 
@@ -578,63 +575,63 @@ Natural Language Query:
 
 SQL Query:
 """
-                    try:
-                        genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
-                        model = genai.GenerativeModel("gemini-2.0-flash")
-                        response = model.generate_content(prompt)
-                        return response.text.strip() if response and response.text else None
-                    except Exception as e:
-                        st.error(f"Error with the model generation: {e}")
-                        return None
+                        try:
+                            genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
+                            model = genai.GenerativeModel("gemini-2.0-flash")
+                            response = model.generate_content(prompt)
+                            return response.text.strip() if response and response.text else None
+                        except Exception as e:
+                            st.error(f"Error with the model generation: {e}")
+                            return None
 
-                sql_output = generate_sql(english_query, table_schema)
-                if sql_output:
-                    sql_output = clean_generated_sql(sql_output)
-                    if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
-                        sql_output = sql_output.replace("select", "select distinct", 1)
+                    sql_output = generate_sql(english_query, table_schema)
+                    if sql_output:
+                        sql_output = clean_generated_sql(sql_output)
+                        if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
+                            sql_output = sql_output.replace("select", "select distinct", 1)
 
-                    st.markdown("### 📝 Generated SQL Query")
-                    st.markdown("<div class='sql-query'>", unsafe_allow_html=True)
-                    st.code(sql_output, language="sql")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                        st.markdown("### 📝 Generated SQL Query")
+                        st.markdown("<div class='sql-query'>", unsafe_allow_html=True)
+                        st.code(sql_output, language="sql")
+                        st.markdown("</div>", unsafe_allow_html=True)
 
-                    # Generate shareable link
-                    params = urlencode({"query": sql_output})
-                    base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
-                    share_link = f"{base_url}?{params}"
+                        # Generate shareable link
+                        params = urlencode({"query": sql_output})
+                        base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
+                        share_link = f"{base_url}?{params}"
 
-                    st.markdown(f"<a href='{share_link}' target='_blank' style='text-decoration:none;'>"
-                              f"<div style='display:inline-flex;align-items:center;background:#7B68EE;color:white;padding:10px 15px;border-radius:6px;'>"
-                              f"<span>📤 Share this result</span>"
-                              f"</div></a>", 
-                              unsafe_allow_html=True)
+                        st.markdown(f"<a href='{share_link}' target='_blank' style='text-decoration:none;'>"
+                                  f"<div style='display:inline-flex;align-items:center;background:#7B68EE;color:white;padding:10px 15px;border-radius:6px;'>"
+                                  f"<span>📤 Share this result</span>"
+                                  f"</div></a>", 
+                                  unsafe_allow_html=True)
 
-                    try:
-                        conn = sqlite3.connect(st.session_state[path_key])
-                        df = pd.read_sql_query(sql_output, conn)
-                        df = df.drop_duplicates()
+                        try:
+                            conn = sqlite3.connect(st.session_state[path_key])
+                            df = pd.read_sql_query(sql_output, conn)
+                            df = df.drop_duplicates()
 
-                        st.markdown("### 🔍 Query Results")
-                        st.dataframe(df, use_container_width=True)
+                            st.markdown("### 🔍 Query Results")
+                            st.dataframe(df, use_container_width=True)
 
-                        # Show row count and download option
-                        col1, col2 = st.columns([1, 1])
-                        with col1:
-                            st.info(f"Results: {len(df)} rows")
-                        with col2:
-                            csv = df.to_csv(index=False)
-                            st.download_button(
-                                label="📥 Download Results",
-                                data=csv,
-                                file_name=f"query_results_{selected_table}.csv",
-                                mime="text/csv"
-                            )
+                            # Show row count and download option
+                            col1, col2 = st.columns([1, 1])
+                            with col1:
+                                st.info(f"Results: {len(df)} rows")
+                            with col2:
+                                csv = df.to_csv(index=False)
+                                st.download_button(
+                                    label="📥 Download Results",
+                                    data=csv,
+                                    file_name=f"query_results_{selected_table}.csv",
+                                    mime="text/csv"
+                                )
 
-                        conn.close()
-                    except Exception as e:
-                        st.error(f"Error executing SQL: {e}")
-                else:
-                    st.warning("SQL generation failed. Try rewording your query and try again.")
+                            conn.close()
+                        except Exception as e:
+                            st.error(f"Error executing SQL: {e}")
+                    else:
+                        st.warning("SQL generation failed. Try rewording your query and try again.")
 
     #############################################
     # 4) TABLE EDITOR SECTION                   #
