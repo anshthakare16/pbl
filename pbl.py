@@ -523,47 +523,50 @@ if st.session_state["logged_in"]:
         #############################################
         # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
         #############################################
-        def clean_generated_sql(sql_query):
-            sql_query = sql_query.strip()
-            sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
-            sql_query = sql_query.replace("\n", " ").replace("\t", " ")
-            return sql_query
-        
-        # Add shared query loading
-        query_params = st.query_params  
-        shared_query = query_params.get("query", [None])[0]
-        
-        if shared_query:
-            st.markdown("<div class='info-msg'>📌 Loaded shared query from link.</div>", unsafe_allow_html=True)
-            st.text_area("Shared Query", shared_query, height=100, disabled=True)
-            try:
-                conn = sqlite3.connect(st.session_state.get("db_path", ""))
-                df = pd.read_sql_query(shared_query, conn)
-                df = df.drop_duplicates()
-                st.subheader("Shared Query Results:")
-                st.dataframe(df)
-                conn.close()
-            except Exception as e:
-                st.error(f"Error executing shared SQL: {e}")
-        
-        english_query = st.text_area("Enter your English query:", 
-                                  placeholder="Example: Show me all employees who work in the sales department",
-                                  height=100)
-        
-        run_query = st.button("🔍 Convert to SQL", key="run_query_btn")
-        
-        if run_query:
-            if not english_query.strip():
-                st.warning("Please enter a query to convert.")
-            elif "selected_table" not in st.session_state:
-                st.warning("Please select a table first.")
-            else:
-                selected_table = st.session_state["selected_table"]
-                table_schema = st.session_state[schema_key][selected_table]
-                
-                with st.spinner("Converting your query to SQL..."):
-                    def generate_sql(nl_query, schema):
-                        prompt = f"""
+            #############################################
+    # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
+    #############################################
+    def clean_generated_sql(sql_query):
+        sql_query = sql_query.strip()
+        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+        sql_query = sql_query.replace("\n", " ").replace("\t", " ")
+        return sql_query
+
+    # Add shared query loading
+    query_params = st.query_params  # Updated: Replaced st.experimental_get_query_params with st.query_params
+    shared_query = query_params.get("query", [None])[0]
+
+    if shared_query:
+        st.markdown("<div class='info-msg'>📌 Loaded shared query from link.</div>", unsafe_allow_html=True)
+        st.text_area("Shared Query", shared_query, height=100, disabled=True)
+        try:
+            conn = sqlite3.connect(st.session_state.get("db_path", ""))
+            df = pd.read_sql_query(shared_query, conn)
+            df = df.drop_duplicates()
+            st.subheader("Shared Query Results:")
+            st.dataframe(df)
+            conn.close()
+        except Exception as e:
+            st.error(f"Error executing shared SQL: {e}")
+
+    english_query = st.text_area("Enter your English query:", 
+                              placeholder="Example: Show me all employees who work in the sales department",
+                              height=100)
+
+    run_query = st.button("🔍 Convert to SQL", key="run_query_btn")
+
+    if run_query:
+        if not english_query.strip():
+            st.warning("Please enter a query to convert.")
+        elif "selected_table" not in st.session_state:
+            st.warning("Please select a table first.")
+        else:
+            selected_table = st.session_state["selected_table"]
+            table_schema = st.session_state[schema_key][selected_table]
+
+            with st.spinner("Converting your query to SQL..."):
+                def generate_sql(nl_query, schema):
+                    prompt = f"""
 You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
 IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
 
@@ -575,126 +578,166 @@ Natural Language Query:
 
 SQL Query:
 """
-                        try:
-                            genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
-                            model = genai.GenerativeModel("gemini-2.0-flash")
-                            response = model.generate_content(prompt)
-                            return response.text.strip() if response and response.text else None
-                        except Exception as e:
-                            st.error(f"Error with the model generation: {e}")
-                            return None
-                    
-                    sql_output = generate_sql(english_query, table_schema)
-                    if sql_output:
-                        sql_output = clean_generated_sql(sql_output)
-                        if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
-                            sql_output = sql_output.replace("select", "select distinct", 1)
-                        
-                        st.markdown("### 📝 Generated SQL Query")
-                        st.markdown("<div class='sql-query'>", unsafe_allow_html=True)
-                        st.code(sql_output, language="sql")
-                        st.markdown("</div>", unsafe_allow_html=True)
-                        
-                        # Generate shareable link
-                        params = urlencode({"query": sql_output})
-                        base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
-                        share_link = f"{base_url}?{params}"
-                        
-                        st.markdown(f"<a href='{share_link}' target='_blank' style='text-decoration:none;'>"
-                                  f"<div style='display:inline-flex;align-items:center;background:#7B68EE;color:white;padding:10px 15px;border-radius:6px;'>"
-                                  f"<span>📤 Share this result</span>"
-                                  f"</div></a>", 
-                                  unsafe_allow_html=True)
-                        
-                        try:
-                            conn = sqlite3.connect(st.session_state[path_key])
-                            df = pd.read_sql_query(sql_output, conn)
-                            df = df.drop_duplicates()
-                            
-                            st.markdown("### 🔍 Query Results")
-                            st.dataframe(df, use_container_width=True)
-                            
-                            # Show row count and download option
-                            col1, col2 = st.columns([1, 1])
-                            with col1:
-                                st.info(f"Results: {len(df)} rows")
-                            with col2:
-                                csv = df.to_csv(index=False)
-                                st.download_button(
-                                    label="📥 Download Results",
-                                    data=csv,
-                                    file_name=f"query_results_{selected_table}.csv",
-                                    mime="text/csv"
-                                )
-                            
-                            conn.close()
-                        except Exception as e:
-                            st.error(f"Error executing SQL: {e}")
-                    else:
-                        st.warning("SQL generation failed. Try rewording your query and try again.")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with tab3:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("### ✏️ Table Editor")
-        st.markdown("View and edit your database table data.")
-        
-        # Check if a table is selected
-        if "selected_table" in st.session_state:
-            selected_table = st.session_state["selected_table"]
-            
-            # Button to display the table data
-            if st.button("👁️ Show Table Data", key="show_table"):
-                st.session_state["show_table_data"] = True
-            
-            # Add column section - FIXED: Moved outside the show_table_data conditional
-            add_col_expander = st.expander("Add a new column")
-            with add_col_expander:
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    new_column_name = st.text_input("New column name:", key="new_column_name")
-                with col2:
-                    col_type = st.selectbox("Type:", ["TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"])
-                
-                if st.button("➕ Add Column", key="add_column_btn"):
-                    if new_column_name:
-                        try:
-                            # Connect to the database
-                            conn = sqlite3.connect(st.session_state[path_key])
-                            cursor = conn.cursor()
-                            
-                            # Check if the column already exists
+                    try:
+                        genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
+                        model = genai.GenerativeModel("gemini-2.0-flash")
+                        response = model.generate_content(prompt)
+                        return response.text.strip() if response and response.text else None
+                    except Exception as e:
+                        st.error(f"Error with the model generation: {e}")
+                        return None
+
+                sql_output = generate_sql(english_query, table_schema)
+                if sql_output:
+                    sql_output = clean_generated_sql(sql_output)
+                    if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
+                        sql_output = sql_output.replace("select", "select distinct", 1)
+
+                    st.markdown("### 📝 Generated SQL Query")
+                    st.markdown("<div class='sql-query'>", unsafe_allow_html=True)
+                    st.code(sql_output, language="sql")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    # Generate shareable link
+                    params = urlencode({"query": sql_output})
+                    base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
+                    share_link = f"{base_url}?{params}"
+
+                    st.markdown(f"<a href='{share_link}' target='_blank' style='text-decoration:none;'>"
+                              f"<div style='display:inline-flex;align-items:center;background:#7B68EE;color:white;padding:10px 15px;border-radius:6px;'>"
+                              f"<span>📤 Share this result</span>"
+                              f"</div></a>", 
+                              unsafe_allow_html=True)
+
+                    try:
+                        conn = sqlite3.connect(st.session_state[path_key])
+                        df = pd.read_sql_query(sql_output, conn)
+                        df = df.drop_duplicates()
+
+                        st.markdown("### 🔍 Query Results")
+                        st.dataframe(df, use_container_width=True)
+
+                        # Show row count and download option
+                        col1, col2 = st.columns([1, 1])
+                        with col1:
+                            st.info(f"Results: {len(df)} rows")
+                        with col2:
+                            csv = df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download Results",
+                                data=csv,
+                                file_name=f"query_results_{selected_table}.csv",
+                                mime="text/csv"
+                            )
+
+                        conn.close()
+                    except Exception as e:
+                        st.error(f"Error executing SQL: {e}")
+                else:
+                    st.warning("SQL generation failed. Try rewording your query and try again.")
+
+    #############################################
+    # 4) TABLE EDITOR SECTION                   #
+    #############################################
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### ✏️ Table Editor")
+    st.markdown("View and edit your database table data.")
+
+    # Check if a table is selected
+    if "selected_table" in st.session_state:
+        selected_table = st.session_state["selected_table"]
+
+        # Button to display the table data
+        if st.button("👁️ Show Table Data", key="show_table"):
+            st.session_state["show_table_data"] = True
+
+        # Add column section
+        add_col_expander = st.expander("Add a new column")
+        with add_col_expander:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                new_column_name = st.text_input("New column name:", key="new_column_name")
+            with col2:
+                col_type = st.selectbox("Type:", ["TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"])
+
+            if st.button("➕ Add Column", key="add_column_btn"):
+                if new_column_name:
+                    try:
+                        # Connect to the database
+                        conn = sqlite3.connect(st.session_state[path_key])
+                        cursor = conn.cursor()
+
+                        # Check if the column already exists
+                        cursor.execute(f"PRAGMA table_info({selected_table})")
+                        columns = cursor.fetchall()
+                        column_names = [col[1] for col in columns]
+
+                        if new_column_name in column_names:
+                            st.warning(f"Column '{new_column_name}' already exists.")
+                        else:
+                            # Add the new column
+                            cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN {new_column_name} {col_type}")
+                            conn.commit()
+
+                            # Update the schema
+                            db_schema_dict = st.session_state[schema_key]
                             cursor.execute(f"PRAGMA table_info({selected_table})")
                             columns = cursor.fetchall()
-                            column_names = [col[1] for col in columns]
-                            
-                            if new_column_name in column_names:
-                                st.warning(f"Column '{new_column_name}' already exists.")
-                            else:
-                                # Add the new column
-                                cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN {new_column_name} {col_type}")
-                                conn.commit()
-                                
-                                # Update the schema
-                                db_schema_dict = st.session_state[schema_key]
-                                cursor.execute(f"PRAGMA table_info({selected_table})")
-                                columns = cursor.fetchall()
-                                schema_str = f"Table: {selected_table}\n"
-                                for col in columns:
-                                    schema_str += f"  - {col[1]} ({col[2]})\n"
-                                db_schema_dict[selected_table] = schema_str
-                                st.session_state[schema_key] = db_schema_dict
-                                
-                                st.markdown("<div class='success-msg animated'>Column added successfully!</div>", 
-                                           unsafe_allow_html=True)
-                                st.session_state["show_table_data"] = True  # Show table after adding column
-                                st.rerun()  # Refresh the page to see the new column
-                        except Exception as e:
-                            st.error(f"Error adding column: {e}")
-                        finally:
-                            conn.close()
-                    else:
-                        st.warning("Please enter a column name.")
+                            schema_str = f"Table: {selected_table}\n"
+                            for col in columns:
+                                schema_str += f"  - {col[1]} ({col[2]})\n"
+                            db_schema_dict[selected_table] = schema_str
+                            st.session_state[schema_key] = db_schema_dict
 
-        
+                            st.markdown("<div class='success-msg animated'>Column added successfully!</div>", 
+                                       unsafe_allow_html=True)
+                            st.session_state["show_table_data"] = True  # Show table after adding column
+                            st.rerun()  # Refresh the page to see the new column
+                    except Exception as e:
+                        st.error(f"Error adding column: {e}")
+                    finally:
+                        conn.close()
+                else:
+                    st.warning("Please enter a column name.")
+
+        # Display table data if the button is clicked
+        if st.session_state.get("show_table_data", False):
+            try:
+                # Connect to the database
+                conn = sqlite3.connect(st.session_state[path_key])
+                cursor = conn.cursor()
+
+                # Fetch the table data
+                df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
+                st.dataframe(df_editable, use_container_width=True)
+
+                # Editable DataFrame
+                st.markdown("### ✏️ Edit Table Data")
+                edited_df = st.data_editor(df_editable, num_rows="dynamic", use_container_width=True)
+
+                # Save changes button
+                if st.button("💾 Save Changes", key="save_changes_btn"):
+                    try:
+                        # Update each row in the table
+                        for _, row in edited_df.iterrows():
+                            # Construct the UPDATE query
+                            set_clause = ", ".join([f"{col} = ?" for col in row.index])
+                            where_clause = f"WHERE rowid = {row.name + 1}"  # Use rowid to identify the row
+                            update_query = f"UPDATE {selected_table} SET {set_clause} {where_clause}"
+                            
+                            # Execute the UPDATE query
+                            cursor.execute(update_query, tuple(row.values))
+
+                        conn.commit()
+                        st.markdown("<div class='success-msg animated'>Changes saved successfully!</div>", 
+                                   unsafe_allow_html=True)
+                    except Exception as e:
+                        st.error(f"Error saving changes: {e}")
+                    finally:
+                        conn.close()
+            except Exception as e:
+                st.error(f"Error loading table data: {e}")
+        else:
+            st.info("Click 'Show Table Data' to view and edit the table.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
