@@ -233,6 +233,7 @@ if st.session_state["logged_in"]:
                         schema_str += f"  - {col[1]} ({col[2]})\n"
                     schema_dict[table_name] = schema_str
                 conn.close()
+                return schema_dict
             except Exception as e:
                 st.error(f"Error extracting schema: {e}")
                 return {}
