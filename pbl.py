@@ -284,7 +284,7 @@ if st.session_state["logged_in"]:
         return sql_query
 
     # Add shared query loading
-    query_params = st.query_params()
+    query_params = st.experimental_get_query_params()
     shared_query = query_params.get("query", [None])[0]
 
     if shared_query:
