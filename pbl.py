@@ -5,10 +5,11 @@ import pandas as pd
 import google.generativeai as genai
 import os
 import subprocess
+from urllib.parse import urlencode
 
+# Check for the google-generativeai package
 output = subprocess.run(["pip", "show", "google-generativeai"], capture_output=True, text=True)
 print(output.stdout)
-
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="English to SQL Translator", page_icon="📊")
@@ -26,10 +27,6 @@ st.markdown(
         label {color: #FFD700 !important; font-weight: bold;}
         .main-content {background-color: #FFFFFF; padding: 20px; border-radius: 10px; color: #000000;}
         .query-label {color: #000000 !important; font-weight: normal;}
-        .marks-entry {background-color: #f0f0f0; padding: 15px; border-radius: 8px; margin-top: 20px;}
-        .marks-tab {padding: 10px; border-radius: 5px; background-color: #333; color: white; margin: 5px;}
-        .active-tab {background-color: #FFA500; color: black;}
-        .stDataFrame {width: 100% !important;}
     </style>
     """,
     unsafe_allow_html=True
@@ -90,25 +87,11 @@ init_db()
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
-# Initialize session state variables for marks entry
-if "adding_marks" not in st.session_state:
-    st.session_state["adding_marks"] = False
-if "exam_name" not in st.session_state:
-    st.session_state["exam_name"] = ""
-if "marks_data" not in st.session_state:
-    st.session_state["marks_data"] = None
-if "roll_column" not in st.session_state:
-    st.session_state["roll_column"] = None
-if "marks_view" not in st.session_state:
-    st.session_state["marks_view"] = "add_new"  # Options: add_new, update_existing
-if "existing_exams" not in st.session_state:
-    st.session_state["existing_exams"] = []
-
 # Sidebar: Logout button if logged in
 if st.session_state["logged_in"]:
     if st.sidebar.button("Logout"):
         st.session_state["logged_in"] = False
-        for key in ["username", "db_schema", "db_path", "adding_marks", "exam_name", "marks_data", "roll_column", "marks_view", "existing_exams"]:
+        for key in ["username", "db_schema", "db_path"]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
@@ -146,455 +129,263 @@ elif auth_choice == "Login":
 if st.session_state["logged_in"]:
     current_user = st.session_state["username"]
     st.write(f"Welcome, {current_user}!")
-    
-    # Create tabs for main functionality
-    tab1, tab2 = st.tabs(["SQL Translator", "Student Marks Management"])
-    
-    with tab1:
-        st.title("English to SQL Translator")
-        st.markdown("Upload a .sql (MySQL dump) or a .db/.sqlite3 (SQLite DB) file. You can also use your stored database if available.")
+    st.title("English to SQL Translator")
+    st.markdown("Upload a .sql (MySQL dump) or a .db/.sqlite3 (SQLite DB) file. You can also use your stored database if available.")
 
-        # Use per-user keys for storing DB info
-        schema_key = f"db_schema_{current_user}"
-        path_key = f"db_path_{current_user}"
-        
-        # If a stored database exists for this user, ask if they want to use it
-        stored_db = st.session_state.get("db_path", None)
-        use_stored = False
-        if stored_db and os.path.exists(stored_db):
-            use_stored = st.checkbox("Use stored database", value=True)
-            if use_stored:
-                db_path = stored_db
-                db_schema_dict = {}
-                try:
-                    conn = sqlite3.connect(db_path)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                    tables = cursor.fetchall()
-                    for table in tables:
-                        table_name = table[0]
-                        cursor.execute(f"PRAGMA table_info({table_name})")
-                        columns = cursor.fetchall()
-                        schema_str = f"Table: {table_name}\n"
-                        for col in columns:
-                            schema_str += f"  - {col[1]} ({col[2]})\n"
-                        db_schema_dict[table_name] = schema_str
-                    conn.close()
-                except Exception as e:
-                    st.error(f"Error extracting schema from stored DB: {e}")
-                st.session_state[schema_key] = db_schema_dict
-                st.session_state[path_key] = db_path
-        else:
-            use_stored = False
-
-        # If not using stored DB, allow file upload to override
-        if not use_stored:
-            # Clear stored DB info for current user
-            for key in [schema_key, path_key]:
-                if key in st.session_state:
-                    del st.session_state[key]
-            uploaded_file = st.file_uploader("Upload a .sql, .db, or .sqlite3 file", type=["sql", "db", "sqlite3"])
+    # Use per-user keys for storing DB info
+    schema_key = f"db_schema_{current_user}"
+    path_key = f"db_path_{current_user}"
+    
+    # If a stored database exists for this user, ask if they want to use it
+    stored_db = st.session_state.get("db_path", None)
+    use_stored = False
+    if stored_db and os.path.exists(stored_db):
+        use_stored = st.checkbox("Use stored database", value=True)
+        if use_stored:
+            db_path = stored_db
             db_schema_dict = {}
-            db_path = None
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = cursor.fetchall()
+                for table in tables:
+                    table_name = table[0]
+                    cursor.execute(f"PRAGMA table_info({table_name})")
+                    columns = cursor.fetchall()
+                    schema_str = f"Table: {table_name}\n"
+                    for col in columns:
+                        schema_str += f"  - {col[1]} ({col[2]})\n"
+                    db_schema_dict[table_name] = schema_str
+                conn.close()
+            except Exception as e:
+                st.error(f"Error extracting schema from stored DB: {e}")
+            st.session_state[schema_key] = db_schema_dict
+            st.session_state[path_key] = db_path
+    else:
+        use_stored = False
 
-            ############### SQL CLEANING ###############
-            def clean_sql_script(sql_script):
-                cleaned_lines = []
-                for line in sql_script.split("\n"):
-                    line = line.strip()
-                    if (
-                        line.lower().startswith(("use ", "create database", "alter", "drop", "grant", "set ", "delimiter"))
-                        or "engine=" in line.lower()
-                        or line.startswith("/*!")
-                        or line.startswith("--")
-                        or line.startswith("#")
-                    ):
-                        continue
-                    line = line.replace("AUTO_INCREMENT", "AUTOINCREMENT")
-                    line = line.replace("`", "")
-                    cleaned_lines.append(line)
-                return "\n".join(cleaned_lines)
+    # If not using stored DB, allow file upload to override
+    if not use_stored:
+        # Clear stored DB info for current user
+        for key in [schema_key, path_key]:
+            if key in st.session_state:
+                del st.session_state[key]
+        uploaded_file = st.file_uploader("Upload a .sql, .db, or .sqlite3 file", type=["sql", "db", "sqlite3"])
+        db_schema_dict = {}
+        db_path = None
 
-            ############### CONVERT .SQL → .DB ###############
-            def convert_sql_to_db(sql_file, db_file):
-                try:
-                    conn = sqlite3.connect(db_file)
-                    cursor = conn.cursor()
-                    with open(sql_file, "r", encoding="utf-8") as f:
-                        raw_script = f.read()
-                    cleaned_script = clean_sql_script(raw_script)
-                    statements = cleaned_script.split(";")
-                    for stmt in statements:
-                        stmt = stmt.strip()
-                        if stmt:
-                            try:
-                                cursor.execute(stmt)
-                            except sqlite3.Error:
-                                pass
-                    conn.commit()
-                    conn.close()
-                    return True
-                except Exception as e:
-                    st.error(f"Error converting .sql to .db: {e}")
-                    return False
+        ############### SQL CLEANING ###############
+        def clean_sql_script(sql_script):
+            cleaned_lines = []
+            for line in sql_script.split("\n"):
+                line = line.strip()
+                if (
+                    line.lower().startswith(("use ", "create database", "alter", "drop", "grant", "set ", "delimiter"))
+                    or "engine=" in line.lower()
+                    or line.startswith("/*!")
+                    or line.startswith("--")
+                    or line.startswith("#")
+                ):
+                    continue
+                line = line.replace("AUTO_INCREMENT", "AUTOINCREMENT")
+                line = line.replace("`", "")
+                cleaned_lines.append(line)
+            return "\n".join(cleaned_lines)
 
-            ############### GET DB SCHEMA ###############
-            def get_db_schema(db_path):
-                try:
-                    conn = sqlite3.connect(db_path)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                    tables = cursor.fetchall()
-                    schema_dict = {}
-                    for table in tables:
-                        table_name = table[0]
-                        cursor.execute(f"PRAGMA table_info({table_name})")
-                        columns = cursor.fetchall()
-                        schema_str = f"Table: {table_name}\n"
-                        for col in columns:
-                            schema_str += f"  - {col[1]} ({col[2]})\n"
-                        schema_dict[table_name] = schema_str
-                    conn.close()
-                    return schema_dict
-                except Exception as e:
-                    st.error(f"Error extracting schema: {e}")
-                    return {}
+        ############### CONVERT .SQL → .DB ###############
+        def convert_sql_to_db(sql_file, db_file):
+            try:
+                conn = sqlite3.connect(db_file)
+                cursor = conn.cursor()
+                with open(sql_file, "r", encoding="utf-8") as f:
+                    raw_script = f.read()
+                cleaned_script = clean_sql_script(raw_script)
+                statements = cleaned_script.split(";")
+                for stmt in statements:
+                    stmt = stmt.strip()
+                    if stmt:
+                        try:
+                            cursor.execute(stmt)
+                        except sqlite3.Error:
+                            pass
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                st.error(f"Error converting .sql to .db: {e}")
+                return False
 
-            if uploaded_file is not None:
-                local_file_path = os.path.join("./", uploaded_file.name)
-                with open(local_file_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success("File uploaded successfully!")
-                if uploaded_file.name.endswith(".sql"):
-                    temp_db_path = f"converted_database_{current_user}.db"
-                    if convert_sql_to_db(local_file_path, temp_db_path):
-                        db_path = temp_db_path
-                        update_user_db_path(current_user, db_path)
-                        db_schema_dict = get_db_schema(db_path)
-                        st.session_state[schema_key] = db_schema_dict
-                        st.session_state[path_key] = db_path
-                    else:
-                        st.error("Failed to convert .sql file. Please check the SQL syntax.")
-                elif uploaded_file.name.endswith((".db", ".sqlite3")):
-                    db_path = local_file_path
+        ############### GET DB SCHEMA ###############
+        def get_db_schema(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = cursor.fetchall()
+                schema_dict = {}
+                for table in tables:
+                    table_name = table[0]
+                    cursor.execute(f"PRAGMA table_info({table_name})")
+                    columns = cursor.fetchall()
+                    schema_str = f"Table: {table_name}\n"
+                    for col in columns:
+                        schema_str += f"  - {col[1]} ({col[2]})\n"
+                    schema_dict[table_name] = schema_str
+                conn.close()
+                return schema_dict
+            except Exception as e:
+                st.error(f"Error extracting schema: {e}")
+                return {}
+
+        if uploaded_file is not None:
+            local_file_path = os.path.join("./", uploaded_file.name)
+            with open(local_file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            st.success("File uploaded successfully!")
+            if uploaded_file.name.endswith(".sql"):
+                temp_db_path = f"converted_database_{current_user}.db"
+                if convert_sql_to_db(local_file_path, temp_db_path):
+                    db_path = temp_db_path
                     update_user_db_path(current_user, db_path)
                     db_schema_dict = get_db_schema(db_path)
                     st.session_state[schema_key] = db_schema_dict
                     st.session_state[path_key] = db_path
-
-        # Display schema only once:
-        selected_table = None
-        if st.session_state.get(schema_key):
-            db_schema_dict = st.session_state[schema_key]
-            if len(db_schema_dict) == 1:
-                selected_table = list(db_schema_dict.keys())[0]
-                st.text_area("Extracted Database Schema", db_schema_dict[selected_table], height=200, disabled=True)
-            else:
-                table_list = list(db_schema_dict.keys())
-                selected_table = st.selectbox("Select a table to use for queries", table_list)
-                st.text_area("Selected Table Schema", db_schema_dict[selected_table], height=150, disabled=True)
-            
-            # Store selected table in session state for marks tab to use
-            st.session_state["selected_table"] = selected_table
-        else:
-            st.warning("No schema extracted. Please upload a valid database file.")
-
-        #############################################
-        # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
-        #############################################
-        def clean_generated_sql(sql_query):
-            sql_query = sql_query.strip()  # Remove leading/trailing spaces
-            sql_query = sql_query.replace("sql", "").replace("", "").strip()  # Remove code block markers
-            sql_query = sql_query.replace("\n", " ")  # Ensure query is a single line if necessary
-            sql_query = sql_query.replace("\t", " ")  # Remove tabs
-            return sql_query
-
-        st.subheader("Enter Your Query")
-        english_query = st.text_area("Enter your English query:", height=100)
-
-        if st.button("Convert to SQL"):
-            if not english_query.strip():
-                st.warning("Please enter a query to convert.")
-            elif not selected_table:
-                st.warning("Please select a table first.")
-            else:
-                table_schema = st.session_state[schema_key][selected_table]
-                import google.generativeai as genai
-
-                def generate_sql(nl_query, schema):
-                    prompt = f"""
-    You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
-    IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
-
-    Table Schema:
-    {schema}
-
-    Natural Language Query:
-    {nl_query}
-
-    SQL Query:
-    """
-                    try:
-                        # Configure the API key for the module
-                        genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
-                        # Call the generation function directly (check the correct function name in the docs)
-                        model=genai.GenerativeModel("gemini-2.0-flash")
-                        response = model.generate_content(prompt)
-                        # Return the generated text (adjust based on the actual response structure)
-                        return response.text.strip() if response and response.text else None
-                    except Exception as e:
-                        st.error(f"Error with the model generation: {e}")
-                        return None
-
-                sql_output = generate_sql(english_query, table_schema)
-                if sql_output:
-                    sql_output = clean_generated_sql(sql_output)
-                    if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
-                        sql_output = sql_output.replace("select", "select distinct", 1)
-                    st.subheader("Generated SQL Query:")
-                    st.code(sql_output)
-                    try:
-                        conn = sqlite3.connect(st.session_state[path_key])
-                        df = pd.read_sql_query(sql_output, conn)
-                        df = df.drop_duplicates()
-                        st.subheader("Query Results:")
-                        st.dataframe(df)
-                        conn.close()
-                    except Exception as e:
-                        st.error(f"Error executing SQL: {e}")
                 else:
-                    st.warning("SQL generation failed. Try again.")
-    
-    #############################################
-    # 4) STUDENT MARKS MANAGEMENT TAB           #
-    #############################################
-    with tab2:
-        st.title("Student Marks Management")
-        
-        if "selected_table" not in st.session_state or not st.session_state["selected_table"]:
-            st.warning("Please select a table in the SQL Translator tab first.")
+                    st.error("Failed to convert .sql file. Please check the SQL syntax.")
+            elif uploaded_file.name.endswith((".db", ".sqlite3")):
+                db_path = local_file_path
+                update_user_db_path(current_user, db_path)
+                db_schema_dict = get_db_schema(db_path)
+                st.session_state[schema_key] = db_schema_dict
+                st.session_state[path_key] = db_path
+
+    # Display schema only once:
+    selected_table = None
+    if st.session_state.get(schema_key):
+        db_schema_dict = st.session_state[schema_key]
+        if len(db_schema_dict) == 1:
+            selected_table = list(db_schema_dict.keys())[0]
+            st.text_area("Extracted Database Schema", db_schema_dict[selected_table], height=200, disabled=True)
         else:
-            selected_table = st.session_state["selected_table"]
-            
-            # Function to get existing exams (columns that might be mark entries)
-            def get_existing_exams():
+            table_list = list(db_schema_dict.keys())
+            selected_table = st.selectbox("Select a table to use for queries", table_list)
+            st.text_area("Selected Table Schema", db_schema_dict[selected_table], height=150, disabled=True)
+    else:
+        st.warning("No schema extracted. Please upload a valid database file.")
+
+    #############################################
+    # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
+    #############################################
+    def clean_generated_sql(sql_query):
+        sql_query = sql_query.strip()
+        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+        sql_query = sql_query.replace("\n", " ").replace("\t", " ")
+        return sql_query
+
+    # Add shared query loading
+    query_params = st.query_params  # Updated: Replaced st.experimental_get_query_params with st.query_params
+    shared_query = query_params.get("query", [None])[0]
+
+    if shared_query:
+        st.info("📌 Loaded shared query from link.")
+        st.text_area("Shared Query", shared_query, height=100, disabled=True)
+        try:
+            conn = sqlite3.connect(st.session_state.get("db_path", ""))
+            df = pd.read_sql_query(shared_query, conn)
+            df = df.drop_duplicates()
+            st.subheader("Shared Query Results:")
+            st.dataframe(df)
+            conn.close()
+        except Exception as e:
+            st.error(f"Error executing shared SQL: {e}")
+
+    english_query = st.text_area("Enter your English query:", height=100)
+
+    if st.button("Convert to SQL"):
+        if not english_query.strip():
+            st.warning("Please enter a query to convert.")
+        elif not selected_table:
+            st.warning("Please select a table first.")
+        else:
+            table_schema = st.session_state[schema_key][selected_table]
+
+            def generate_sql(nl_query, schema):
+                prompt = f"""
+You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
+IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
+
+Table Schema:
+{schema}
+
+Natural Language Query:
+{nl_query}
+
+SQL Query:
+"""
                 try:
-                    conn = sqlite3.connect(st.session_state[path_key])
-                    cursor = conn.cursor()
-                    cursor.execute(f"PRAGMA table_info({selected_table})")
-                    columns = cursor.fetchall()
-                    conn.close()
-                    
-                    # Filter out likely non-exam columns (ID, name, etc.)
-                    excluded_terms = ['id', 'roll', 'name', 'email', 'phone', 'address', 'dob', 'gender', 'class']
-                    exams = []
-                    for col in columns:
-                        col_name = col[1].lower()
-                        if not any(term in col_name for term in excluded_terms):
-                            exams.append(col[1])
-                    return exams
+                    genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
+                    model = genai.GenerativeModel("gemini-2.0-flash")
+                    response = model.generate_content(prompt)
+                    return response.text.strip() if response and response.text else None
                 except Exception as e:
-                    st.error(f"Error getting exam columns: {e}")
-                    return []
-            
-            # Function to identify roll number column
-            def get_roll_column():
-                try:
-                    conn = sqlite3.connect(st.session_state[path_key])
-                    df = pd.read_sql_query(f"SELECT * FROM {selected_table} LIMIT 1", conn)
-                    conn.close()
-                    
-                    for col in df.columns:
-                        if "roll" in col.lower() or "id" in col.lower():
-                            return col
-                    return df.columns[0]  # Default to first column if no roll/id found
-                except Exception as e:
-                    st.error(f"Error identifying roll column: {e}")
+                    st.error(f"Error with the model generation: {e}")
                     return None
-            
-            # Detect existing exams/columns
-            existing_exams = get_existing_exams()
-            
-            # Switch between add new marks and update existing marks
-            col1, col2 = st.columns(2)
-            add_new = col1.button("Add New Exam Marks", key="add_new_btn", 
-                                 use_container_width=True)
-            update_existing = col2.button("Update Existing Exam Marks", key="update_existing_btn", 
-                                        use_container_width=True)
-            
-            if add_new:
-                st.session_state["marks_view"] = "add_new"
-            elif update_existing:
-                st.session_state["marks_view"] = "update_existing"
-            
-            st.markdown("---")
-            
-            # Add new exam marks
-            if st.session_state["marks_view"] == "add_new":
-                st.subheader("Add New Exam Marks")
-                
-                # Get new exam name
-                new_exam = st.text_input("Enter New Exam Name:", key="new_exam_name")
-                
-                if new_exam:
-                    # Check if exam already exists
-                    if new_exam in existing_exams:
-                        st.error(f"Exam '{new_exam}' already exists. Please choose a different name or use the update option.")
-                    else:
-                        # Add new column to the table
-                        try:
-                            conn = sqlite3.connect(st.session_state[path_key])
-                            cursor = conn.cursor()
-                            cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN {new_exam} VARCHAR")
-                            conn.commit()
-                            
-                            # Get student data with new column
-                            roll_col = get_roll_column()
-                            if roll_col:
-                                st.session_state["roll_column"] = roll_col
-                                df = pd.read_sql_query(f"SELECT {roll_col} FROM {selected_table}", conn)
-                                df[new_exam] = ""  # Add empty column for marks
-                                st.session_state["marks_data"] = df
-                                st.session_state["exam_name"] = new_exam
-                                
-                                st.success(f"Added new column '{new_exam}' to the database. Enter marks below:")
-                            else:
-                                st.error("Couldn't identify roll number column")
-                            conn.close()
-                        except Exception as e:
-                            st.error(f"Error adding new exam column: {e}")
-                
-                # Show marks entry interface if marks_data is available
-                if st.session_state.get("marks_data") is not None and st.session_state["exam_name"] == new_exam:
-                    df = st.session_state["marks_data"]
-                    roll_col = st.session_state["roll_column"]
-                    
-                    # Convert DataFrame to editable format
-                    edited_df = st.data_editor(
-                        df,
-                        num_rows="fixed",
-                        key="marks_editor",
-                        column_config={
-                            roll_col: st.column_config.TextColumn(
-                                "Roll Number", disabled=True
-                            ),
-                            new_exam: st.column_config.TextColumn(
-                                "Marks (enter 'Absent' if student missed exam)"
-                            )
-                        },
-                        use_container_width=True,
-                        height=400
-                    )
-                    
-                    # Save marks button
-                    if st.button("Save All Marks", key="save_new_marks"):
-                        try:
-                            conn = sqlite3.connect(st.session_state[path_key])
-                            cursor = conn.cursor()
-                            
-                            # Update each student's marks
-                            for index, row in edited_df.iterrows():
-                                roll_value = row[roll_col]
-                                mark_value = row[new_exam]
-                                cursor.execute(
-                                    f"UPDATE {selected_table} SET {new_exam} = ? WHERE {roll_col} = ?", 
-                                    (mark_value, roll_value)
-                                )
-                            
-                            conn.commit()
-                            conn.close()
-                            st.success(f"All marks for '{new_exam}' saved successfully!")
-                            
-                            # Clear the marks data
-                            st.session_state["marks_data"] = None
-                            st.session_state["exam_name"] = ""
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error saving marks: {e}")
-            
-            # Update existing exam marks
-            elif st.session_state["marks_view"] == "update_existing":
-                st.subheader("Update Existing Exam Marks")
-                
-                if not existing_exams:
-                    st.warning("No existing exam columns found in the database.")
-                else:
-                    # Select existing exam to update
-                    selected_exam = st.selectbox("Select Exam to Update:", existing_exams)
-                    
-                    if selected_exam:
-                        try:
-                            conn = sqlite3.connect(st.session_state[path_key])
-                            roll_col = get_roll_column()
-                            
-                            if roll_col:
-                                # Get current marks data
-                                df = pd.read_sql_query(f"SELECT {roll_col}, {selected_exam} FROM {selected_table}", conn)
-                                conn.close()
-                                
-                                # Show editable data
-                                edited_df = st.data_editor(
-                                    df,
-                                    num_rows="fixed",
-                                    key=f"update_marks_{selected_exam}",
-                                    column_config={
-                                        roll_col: st.column_config.TextColumn(
-                                            "Roll Number", disabled=True
-                                        ),
-                                        selected_exam: st.column_config.TextColumn(
-                                            "Marks (enter 'Absent' if student missed exam)"
-                                        )
-                                    },
-                                    use_container_width=True,
-                                    height=400
-                                )
-                                
-                                # Save updated marks
-                                if st.button("Save Updates", key=f"save_updates_{selected_exam}"):
-                                    try:
-                                        conn = sqlite3.connect(st.session_state[path_key])
-                                        cursor = conn.cursor()
-                                        
-                                        # Update each student's marks
-                                        for index, row in edited_df.iterrows():
-                                            roll_value = row[roll_col]
-                                            mark_value = row[selected_exam]
-                                            cursor.execute(
-                                                f"UPDATE {selected_table} SET {selected_exam} = ? WHERE {roll_col} = ?", 
-                                                (mark_value, roll_value)
-                                            )
-                                        
-                                        conn.commit()
-                                        conn.close()
-                                        st.success(f"Updates to '{selected_exam}' saved successfully!")
-                                    except Exception as e:
-                                        st.error(f"Error updating marks: {e}")
-                            else:
-                                st.error("Couldn't identify roll number column")
-                        except Exception as e:
-                            st.error(f"Error loading existing marks: {e}")
-            
-            # Link to view full marks data
-            st.markdown("---")
-            if st.button("View Complete Student Data"):
+
+            sql_output = generate_sql(english_query, table_schema)
+            if sql_output:
+                sql_output = clean_generated_sql(sql_output)
+                if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
+                    sql_output = sql_output.replace("select", "select distinct", 1)
+
+                st.subheader("Generated SQL Query:")
+                st.code(sql_output)
+
+                # Generate shareable link
+                params = urlencode({"query": sql_output})
+                base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
+                share_link = f"{base_url}?{params}"
+                st.markdown(f"📍 [**Share this result**]({share_link})")
+
                 try:
                     conn = sqlite3.connect(st.session_state[path_key])
-                    df = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
+                    df = pd.read_sql_query(sql_output, conn)
+                    df = df.drop_duplicates()
+                    st.subheader("Query Results:")
+                    st.dataframe(df)
                     conn.close()
-                    st.dataframe(df, use_container_width=True)
-                    
-                    # Export as CSV option
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        "Download as CSV",
-                        csv,
-                        f"{selected_table}_marks.csv",
-                        "text/csv",
-                        key='download-csv'
-                    )
                 except Exception as e:
-                    st.error(f"Error viewing complete data: {e}")
+                    st.error(f"Error executing SQL: {e}")
+            else:
+                st.warning("SQL generation failed. Try again.")
+
+#############################################
+# DB WRITE ACCESS - EDIT TABLE SECTION      #
+#############################################
+
+st.subheader("💠 Edit Table Data (Write Access)")
+
+if selected_table:  # This will only be checked if selected_table is defined
+    try:
+        conn = sqlite3.connect(st.session_state[path_key])
+        df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
+        edited_df = st.data_editor(df_editable, num_rows="dynamic", use_container_width=True)
+
+        if st.button("Save Changes"):
+            cursor = conn.cursor()
+            cursor.execute(f"DELETE FROM {selected_table}")
+            for _, row in edited_df.iterrows():
+                columns = ", ".join(row.index)
+                placeholders = ", ".join(["?"] * len(row))
+                values = tuple(row.values)
+                cursor.execute(f"INSERT INTO {selected_table} ({columns}) VALUES ({placeholders})", values)
+            conn.commit()
+            st.success("Changes saved successfully.")
+        conn.close()
+    except Exception as e:
+        st.error(f"Error editing table: {e}")
+
 else:
-    st.info("Please log in to access the application.")
+    st.info("Select a table above to edit.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
