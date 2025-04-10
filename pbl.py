@@ -363,27 +363,43 @@ SQL Query:
 # DB WRITE ACCESS - EDIT TABLE SECTION      #
 #############################################
 
+# DB WRITE ACCESS - EDIT TABLE SECTION
 st.subheader("💠 Edit Table Data (Write Access)")
 
 if selected_table:  # This will only be checked if selected_table is defined
-    try:
-        conn = sqlite3.connect(st.session_state[path_key])
-        df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
-        edited_df = st.data_editor(df_editable, num_rows="dynamic", use_container_width=True)
+    # Button to display the table data
+    if st.button("Show Table Data"):
+        try:
+            conn = sqlite3.connect(st.session_state[path_key])
+            df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
+            st.dataframe(df_editable)
 
-        if st.button("Save Changes"):
-            cursor = conn.cursor()
-            cursor.execute(f"DELETE FROM {selected_table}")
-            for _, row in edited_df.iterrows():
-                columns = ", ".join(row.index)
-                placeholders = ", ".join(["?"] * len(row))
-                values = tuple(row.values)
-                cursor.execute(f"INSERT INTO {selected_table} ({columns}) VALUES ({placeholders})", values)
-            conn.commit()
-            st.success("Changes saved successfully.")
-        conn.close()
-    except Exception as e:
-        st.error(f"Error editing table: {e}")
+            # Option to add a new column
+            new_column_name = st.text_input("Add a new column name:")
+            if st.button("Add Column"):
+                if new_column_name:
+                    cursor = conn.cursor()
+                    cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN '{new_column_name}' TEXT")
+                    conn.commit()
+                    st.success(f"Column '{new_column_name}' added successfully.")
+                else:
+                    st.warning("Please enter a column name.")
+
+            # Editable DataFrame
+            edited_df = st.data_editor(df_editable, num_rows="dynamic", use_container_width=True)
+
+            if st.button("Save Changes"):
+                cursor.execute(f"DELETE FROM {selected_table}")
+                for _, row in edited_df.iterrows():
+                    columns = ", ".join(row.index)
+                    placeholders = ", ".join(["?"] * len(row))
+                    values = tuple(row.values)
+                    cursor.execute(f"INSERT INTO {selected_table} ({columns}) VALUES ({placeholders})", values)
+                conn.commit()
+                st.success("Changes saved successfully.")
+            conn.close()
+        except Exception as e:
+            st.error(f"Error editing table: {e}")
 
 else:
     st.info("Select a table above to edit.")
