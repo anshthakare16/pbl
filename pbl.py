@@ -364,6 +364,7 @@ SQL Query:
 #############################################
 
 # DB WRITE ACCESS - EDIT TABLE SECTION
+# DB WRITE ACCESS - EDIT TABLE SECTION
 st.subheader("💠 Edit Table Data (Write Access)")
 
 if selected_table:  # This will only be checked if selected_table is defined
@@ -371,6 +372,9 @@ if selected_table:  # This will only be checked if selected_table is defined
     if st.button("Show Table Data"):
         try:
             conn = sqlite3.connect(st.session_state[path_key])
+            cursor = conn.cursor()
+
+            # Fetch the table data
             df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
             st.dataframe(df_editable)
 
@@ -378,10 +382,19 @@ if selected_table:  # This will only be checked if selected_table is defined
             new_column_name = st.text_input("Add a new column name:")
             if st.button("Add Column"):
                 if new_column_name:
-                    cursor = conn.cursor()
-                    cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN '{new_column_name}' TEXT")
-                    conn.commit()
-                    st.success(f"Column '{new_column_name}' added successfully.")
+                    # Check if the column already exists
+                    cursor.execute(f"PRAGMA table_info({selected_table})")
+                    columns = cursor.fetchall()
+                    column_names = [col[1] for col in columns]
+                    if new_column_name in column_names:
+                        st.warning(f"Column '{new_column_name}' already exists.")
+                    else:
+                        # Add the new column
+                        cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN {new_column_name} TEXT")
+                        conn.commit()
+                        st.success(f"Column '{new_column_name}' added successfully.")
+                        # Refresh the table data
+                        df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
                 else:
                     st.warning("Please enter a column name.")
 
@@ -403,5 +416,4 @@ if selected_table:  # This will only be checked if selected_table is defined
 
 else:
     st.info("Select a table above to edit.")
-
 st.markdown("<hr>", unsafe_allow_html=True)
