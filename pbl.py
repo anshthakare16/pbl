@@ -18,187 +18,192 @@ st.set_page_config(layout="wide", page_title="SQL Query Assistant", page_icon="ð
 st.markdown(
     """
     <style>
-        /* Main Theme Colors */
-        :root {
-            --primary: #7B68EE;
-            --secondary: #6A5ACD;
-            --background: #F8F9FA;
-            --card-bg: #FFFFFF;
-            --text: #333333;
-            --accent: #FF6B6B;
-            --success: #4CAF50;
-            --warning: #FFC107;
-            --error: #F44336;
-        }
-        
-        /* Global Styles */
-        .stApp {
-            background-color: var(--background);
-            color: var(--text);
-        }
-        
-        h1, h2, h3 {
-            color: var(--primary);
-            font-weight: 600;
-        }
-        
-        /* Sidebar Styling */
-        .stSidebar {
-            background-color: var(--card-bg);
-            border-right: 1px solid #E0E0E0;
-            padding: 2rem 1rem;
-        }
-        
-        /* Button Styling */
-        .stButton button {
-            background-color: var(--primary);
-            color: white;
-            font-weight: 500;
-            border-radius: 6px;
-            border: none;
-            padding: 0.5rem 1rem;
-            transition: all 0.3s ease;
-        }
-        
-        .stButton button:hover {
-            background-color: var(--secondary);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        
-        /* Card Styling for Content Areas */
-        .card {
-            background-color: var(--card-bg);
-            border-radius: 10px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            margin-bottom: 1rem;
-        }
-        
-        /* SQL Query Display */
-        .sql-query {
-            background-color: #282c34;
-            color: #abb2bf;
-            font-family: 'Courier New', monospace;
-            padding: 1rem;
-            border-radius: 8px;
-            border-left: 4px solid var(--primary);
-        }
-        
-        /* Table Styling */
-        .dataframe {
-            border-collapse: collapse;
-            width: 100%;
-            border: none;
-            font-size: 14px;
-        }
-        
-        .dataframe th {
-            background-color: var(--primary);
-            color: white;
-            padding: 10px;
-            text-align: left;
-        }
-        
-        .dataframe td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #E0E0E0;
-        }
-        
-        .dataframe tr:nth-child(even) {
-            background-color: #F5F7FF;
-        }
-        
-        /* Form Fields */
-        input, textarea, select {
-            border-radius: 6px !important;
-            border: 1px solid #E0E0E0 !important;
-        }
-        
-        /* Status Messages */
-        .success-msg {
-            color: var(--success);
-            padding: 10px;
-            border-radius: 6px;
-            background: rgba(76, 175, 80, 0.1);
-            border-left: 4px solid var(--success);
-        }
-        
-        .error-msg {
-            color: var(--error);
-            padding: 10px;
-            border-radius: 6px;
-            background: rgba(244, 67, 54, 0.1);
-            border-left: 4px solid var(--error);
-        }
-        
-        .info-msg {
-            color: var(--primary);
-            padding: 10px;
-            border-radius: 6px;
-            background: rgba(123, 104, 238, 0.1);
-            border-left: 4px solid var(--primary);
-        }
-        
-        /* Tab Styling */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 2rem;
-        }
-        
-        .stTabs [data-baseweb="tab"] {
-            height: 50px;
-            white-space: pre-wrap;
-            background-color: transparent;
-            border-radius: 6px 6px 0 0;
-            color: var(--text);
-            font-weight: 500;
-        }
-        
-        .stTabs [aria-selected="true"] {
-            background-color: transparent;
-            border-bottom: 2px solid var(--primary);
-            color: var(--primary);
-        }
-        
-        /* Add hover effect */
-        .stTabs [data-baseweb="tab"]:hover {
-            color: var(--primary);
-        }
-        
-        /* Section Headers */
-        .section-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #E0E0E0;
-        }
-        
-        .section-header svg {
-            margin-right: 0.5rem;
-            color: var(--primary);
-        }
-        
-        /* Animation for success messages */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .animated {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        
-        /* Footer */
-        .footer {
-            text-align: center;
-            padding: 1rem;
-            font-size: 0.8rem;
-            color: #999;
-            margin-top: 2rem;
-            border-top: 1px solid #E0E0E0;
-        }
-    </style>
+    /* Main Theme Colors */
+    :root {
+        --primary: #7B68EE;
+        --secondary: #6A5ACD;
+        --background: #F8F9FA;
+        --card-bg: #FFFFFF;
+        --text: #333333;
+        --accent: #FF6B6B;
+        --success: #4CAF50;
+        --warning: #FFC107;
+        --error: #F44336;
+    }
+    
+    /* Global Styles */
+    .stApp {
+        background-color: var(--background);
+        color: var(--text);
+    }
+    
+    h1, h2, h3 {
+        color: var(--primary);
+        font-weight: 700;  /* Increased font weight */
+        margin: 0;  /* Reset margin */
+    }
+    
+    /* Sidebar Styling */
+    .stSidebar {
+        background-color: var(--card-bg);
+        border-right: 1px solid #E0E0E0;
+        padding: 2rem 1.5rem;  /* Adjusted padding for more space */
+    }
+
+    /* Button Styling */
+    .stButton button {
+        background-color: var(--primary);
+        color: white;
+        font-weight: 600;  /* Increased font weight */
+        border-radius: 8px;  /* Slightly rounder edges */
+        border: none;
+        padding: 0.75rem 1.5rem;  /* Increased padding */
+        transition: all 0.3s ease;
+        cursor: pointer;  /* Cursor changes to pointer */
+    }
+    
+    .stButton button:hover {
+        background-color: var(--secondary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);  /* Enhanced shadow for depth */
+    }
+    
+    /* Card Styling for Content Areas */
+    .card {
+        background-color: var(--card-bg);
+        border-radius: 12px;  /* More rounded corners */
+        padding: 2rem;  /* More padding for content */
+        box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        margin-bottom: 1.5rem;  /* Increased margin */
+    }
+    
+    /* SQL Query Display */
+    .sql-query {
+        background-color: #282c34;
+        color: #abb2bf;
+        font-family: 'Courier New', monospace;
+        padding: 1.5rem;  /* Increased padding */
+        border-radius: 8px;
+        border-left: 4px solid var(--primary);
+        overflow-x: auto;  /* Allow horizontal scroll for long queries */
+    }
+    
+    /* Table Styling */
+    .dataframe {
+        border-collapse: collapse;
+        width: 100%;
+        border: none;
+        font-size: 15px;  /* Slightly larger font */
+    }
+    
+    .dataframe th {
+        background-color: var(--primary);
+        color: white;
+        padding: 15px;  /* Increased padding */
+        text-align: left;
+    }
+    
+    .dataframe td {
+        padding: 10px;  /* Increased padding */
+        border-bottom: 1px solid #E0E0E0;
+    }
+    
+    .dataframe tr:nth-child(even) {
+        background-color: #F5F7FF;
+    }
+    
+    /* Form Fields */
+    input, textarea, select {
+        border-radius: 8px !important;
+        border: 1px solid #E0E0E0 !important;
+        padding: 0.5rem;  /* Added padding */
+        width: 100%;  /* Full width for better UX */
+    }
+    
+    /* Status Messages */
+    .success-msg, .error-msg, .info-msg {
+        padding: 12px;  /* Increased padding for better readability */
+        border-radius: 8px;
+        margin-bottom: 1rem;  /* Space out messages */
+    }
+
+    .success-msg {
+        color: var(--success);
+        background: rgba(76, 175, 80, 0.1);
+        border-left: 4px solid var(--success);
+    }
+    
+    .error-msg {
+        color: var(--error);
+        background: rgba(244, 67, 54, 0.1);
+        border-left: 4px solid var(--error);
+    }
+    
+    .info-msg {
+        color: var(--primary);
+        background: rgba(123, 104, 238, 0.1);
+        border-left: 4px solid var(--primary);
+    }
+    
+    /* Tab Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        height: 60px;  /* Increased height */
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 8px 8px 0 0;
+        color: var(--text);
+        font-weight: 600;  /* Increased font weight */
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: transparent;
+        border-bottom: 2px solid var(--primary);
+        color: var(--primary);
+    }
+    
+    /* Add hover effect */
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--primary);
+    }
+    
+    /* Section Headers */
+    .section-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;  /* Increased space between sections */
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #E0E0E0;
+    }
+    
+    .section-header svg {
+        margin-right: 0.5rem;
+        color: var(--primary);
+    }
+    
+    /* Animation for success messages */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .animated {
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 1rem;
+        font-size: 0.9rem;  /* Slightly larger font size */
+        color: #999;
+        margin-top: 2.5rem;  /* Increased margin */
+        border-top: 1px solid #E0E0E0;
+    }
+</style>
     """,
     unsafe_allow_html=True
 )
