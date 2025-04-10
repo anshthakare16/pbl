@@ -5,10 +5,11 @@ import pandas as pd
 import google.generativeai as genai
 import os
 import subprocess
+from urllib.parse import urlencode
 
+# Check for the google-generativeai package
 output = subprocess.run(["pip", "show", "google-generativeai"], capture_output=True, text=True)
 print(output.stdout)
-
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="English to SQL Translator", page_icon="📊")
@@ -232,7 +233,6 @@ if st.session_state["logged_in"]:
                         schema_str += f"  - {col[1]} ({col[2]})\n"
                     schema_dict[table_name] = schema_str
                 conn.close()
-                return schema_dict
             except Exception as e:
                 st.error(f"Error extracting schema: {e}")
                 return {}
@@ -277,38 +277,40 @@ if st.session_state["logged_in"]:
     # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
     #############################################
     def clean_generated_sql(sql_query):
-    sql_query = sql_query.strip()
-    sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
-    sql_query = sql_query.replace("\n", " ").replace("\t", " ")
-    return sql_query
+        sql_query = sql_query.strip()
+        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+        sql_query = sql_query.replace("\n", " ").replace("\t", " ")
+        return sql_query
 
-# Add shared query loading
-query_params = st.experimental_get_query_params()
-shared_query = query_params.get("query", [None])[0]
+    # Add shared query loading
+    query_params = st.experimental_get_query_params()
+    shared_query = query_params.get("query", [None])[0]
 
-if shared_query:
-    st.info("📌 Loaded shared query from link.")
-    st.text_area("Shared Query", shared_query, height=100, disabled=True)
-    try:
-        conn = sqlite3.connect(st.session_state.get("db_path", ""))
-        df = pd.read_sql_query(shared_query, conn)
-        df = df.drop_duplicates()
-        st.subheader("Shared Query Results:")
-        st.dataframe(df)
-        conn.close()
-    except Exception as e:
-        st.error(f"Error executing shared SQL: {e}")
+    if shared_query:
+        st.info("📌 Loaded shared query from link.")
+        st.text_area("Shared Query", shared_query, height=100, disabled=True)
+        try:
+            conn = sqlite3.connect(st.session_state.get("db_path", ""))
+            df = pd.read_sql_query(shared_query, conn)
+            df = df.drop_duplicates()
+            st.subheader("Shared Query Results:")
+            st.dataframe(df)
+            conn.close()
+        except Exception as e:
+            st.error(f"Error executing shared SQL: {e}")
+
+    english_query = st.text_area("Enter your English query:", height=100)
 
     if st.button("Convert to SQL"):
-    if not english_query.strip():
-        st.warning("Please enter a query to convert.")
-    elif not selected_table:
-        st.warning("Please select a table first.")
-    else:
-        table_schema = st.session_state[schema_key][selected_table]
+        if not english_query.strip():
+            st.warning("Please enter a query to convert.")
+        elif not selected_table:
+            st.warning("Please select a table first.")
+        else:
+            table_schema = st.session_state[schema_key][selected_table]
 
-        def generate_sql(nl_query, schema):
-            prompt = f"""
+            def generate_sql(nl_query, schema):
+                prompt = f"""
 You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
 IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
 
@@ -320,41 +322,41 @@ Natural Language Query:
 
 SQL Query:
 """
-            try:
-                genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
-                model = genai.GenerativeModel("gemini-2.0-flash")
-                response = model.generate_content(prompt)
-                return response.text.strip() if response and response.text else None
-            except Exception as e:
-                st.error(f"Error with the model generation: {e}")
-                return None
+                try:
+                    genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
+                    model = genai.GenerativeModel("gemini-2.0-flash")
+                    response = model.generate_content(prompt)
+                    return response.text.strip() if response and response.text else None
+                except Exception as e:
+                    st.error(f"Error with the model generation: {e}")
+                    return None
 
-        sql_output = generate_sql(english_query, table_schema)
-        if sql_output:
-            sql_output = clean_generated_sql(sql_output)
-            if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
-                sql_output = sql_output.replace("select", "select distinct", 1)
+            sql_output = generate_sql(english_query, table_schema)
+            if sql_output:
+                sql_output = clean_generated_sql(sql_output)
+                if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
+                    sql_output = sql_output.replace("select", "select distinct", 1)
 
-            st.subheader("Generated SQL Query:")
-            st.code(sql_output)
+                st.subheader("Generated SQL Query:")
+                st.code(sql_output)
 
-            # Generate shareable link
-            params = urlencode({"query": sql_output})
-            base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
-            share_link = f"{base_url}?{params}"
-            st.markdown(f"📍 [**Share this result**]({share_link})")
+                # Generate shareable link
+                params = urlencode({"query": sql_output})
+                base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
+                share_link = f"{base_url}?{params}"
+                st.markdown(f"📍 [**Share this result**]({share_link})")
 
-            try:
-                conn = sqlite3.connect(st.session_state[path_key])
-                df = pd.read_sql_query(sql_output, conn)
-                df = df.drop_duplicates()
-                st.subheader("Query Results:")
-                st.dataframe(df)
-                conn.close()
-            except Exception as e:
-                st.error(f"Error executing SQL: {e}")
-        else:
-            st.warning("SQL generation failed. Try again.")
+                try:
+                    conn = sqlite3.connect(st.session_state[path_key])
+                    df = pd.read_sql_query(sql_output, conn)
+                    df = df.drop_duplicates()
+                    st.subheader("Query Results:")
+                    st.dataframe(df)
+                    conn.close()
+                except Exception as e:
+                    st.error(f"Error executing SQL: {e}")
+            else:
+                st.warning("SQL generation failed. Try again.")
 
 #############################################
 # DB WRITE ACCESS - EDIT TABLE SECTION      #
