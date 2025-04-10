@@ -277,26 +277,38 @@ if st.session_state["logged_in"]:
     # 3) NATURAL LANGUAGE → SQL → EXECUTION     #
     #############################################
     def clean_generated_sql(sql_query):
-        sql_query = sql_query.strip()  # Remove leading/trailing spaces
-        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()  # Remove code block markers
-        sql_query = sql_query.replace("\n", " ")  # Ensure query is a single line if necessary
-        sql_query = sql_query.replace("\t", " ")  # Remove tabs
-        return sql_query
+    sql_query = sql_query.strip()
+    sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+    sql_query = sql_query.replace("\n", " ").replace("\t", " ")
+    return sql_query
 
-    st.subheader("Enter Your Query")
-    english_query = st.text_area("Enter your English query:", height=100)
+# Add shared query loading
+query_params = st.experimental_get_query_params()
+shared_query = query_params.get("query", [None])[0]
+
+if shared_query:
+    st.info("📌 Loaded shared query from link.")
+    st.text_area("Shared Query", shared_query, height=100, disabled=True)
+    try:
+        conn = sqlite3.connect(st.session_state.get("db_path", ""))
+        df = pd.read_sql_query(shared_query, conn)
+        df = df.drop_duplicates()
+        st.subheader("Shared Query Results:")
+        st.dataframe(df)
+        conn.close()
+    except Exception as e:
+        st.error(f"Error executing shared SQL: {e}")
 
     if st.button("Convert to SQL"):
-        if not english_query.strip():
-            st.warning("Please enter a query to convert.")
-        elif not selected_table:
-            st.warning("Please select a table first.")
-        else:
-            table_schema = st.session_state[schema_key][selected_table]
-            import google.generativeai as genai
+    if not english_query.strip():
+        st.warning("Please enter a query to convert.")
+    elif not selected_table:
+        st.warning("Please select a table first.")
+    else:
+        table_schema = st.session_state[schema_key][selected_table]
 
-            def generate_sql(nl_query, schema):
-                prompt = f"""
+        def generate_sql(nl_query, schema):
+            prompt = f"""
 You are a SQL expert. Given the following table schema for '{selected_table}' and a natural language query, generate a valid SQL query that operates solely on that table.
 IMPORTANT: Ensure the query returns each row only once. Use DISTINCT if necessary.
 
@@ -308,37 +320,69 @@ Natural Language Query:
 
 SQL Query:
 """
-                try:
-                    # Configure the API key for the module
-                    genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
-                    # Call the generation function directly (check the correct function name in the docs)
-                    model=genai.GenerativeModel("gemini-2.0-flash")
-                    response = model.generate_content(prompt)
-                    # Return the generated text (adjust based on the actual response structure)
-                    return response.text.strip()if response and response.text else None
-                except Exception as e:
-                    st.error(f"Error with the model generation: {e}")
-                    return None
+            try:
+                genai.configure(api_key="AIzaSyAAHfxYOnX2YckrUj9BPC3VZ29mTo-qnNY")
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                response = model.generate_content(prompt)
+                return response.text.strip() if response and response.text else None
+            except Exception as e:
+                st.error(f"Error with the model generation: {e}")
+                return None
 
-            sql_output = generate_sql(english_query, table_schema)
-            if sql_output:
-                sql_output = clean_generated_sql(sql_output)
-                if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
-                    sql_output = sql_output.replace("select", "select distinct", 1)
-                st.subheader("Generated SQL Query:")
-                st.code(sql_output)
-                try:
-                    conn = sqlite3.connect(st.session_state[path_key])
-                    df = pd.read_sql_query(sql_output, conn)
-                    df = df.drop_duplicates()
-                    st.subheader("Query Results:")
-                    st.dataframe(df)
-                    conn.close()
-                except Exception as e:
-                    st.error(f"Error executing SQL: {e}")
-            else:
-                st.warning("SQL generation failed. Try again.")
+        sql_output = generate_sql(english_query, table_schema)
+        if sql_output:
+            sql_output = clean_generated_sql(sql_output)
+            if sql_output.lower().startswith("select") and "distinct" not in sql_output.lower():
+                sql_output = sql_output.replace("select", "select distinct", 1)
+
+            st.subheader("Generated SQL Query:")
+            st.code(sql_output)
+
+            # Generate shareable link
+            params = urlencode({"query": sql_output})
+            base_url = "https://englishtosqlconverter.streamlit.app/"  # Replace with actual URL
+            share_link = f"{base_url}?{params}"
+            st.markdown(f"📍 [**Share this result**]({share_link})")
+
+            try:
+                conn = sqlite3.connect(st.session_state[path_key])
+                df = pd.read_sql_query(sql_output, conn)
+                df = df.drop_duplicates()
+                st.subheader("Query Results:")
+                st.dataframe(df)
+                conn.close()
+            except Exception as e:
+                st.error(f"Error executing SQL: {e}")
+        else:
+            st.warning("SQL generation failed. Try again.")
+
+#############################################
+# DB WRITE ACCESS - EDIT TABLE SECTION      #
+#############################################
+
+st.subheader("💠 Edit Table Data (Write Access)")
+
+if selected_table:
+    try:
+        conn = sqlite3.connect(st.session_state[path_key])
+        df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
+        edited_df = st.data_editor(df_editable, num_rows="dynamic", use_container_width=True)
+
+        if st.button("Save Changes"):
+            cursor = conn.cursor()
+            cursor.execute(f"DELETE FROM {selected_table}")
+            for _, row in edited_df.iterrows():
+                columns = ", ".join(row.index)
+                placeholders = ", ".join(["?"] * len(row))
+                values = tuple(row.values)
+                cursor.execute(f"INSERT INTO {selected_table} ({columns}) VALUES ({placeholders})", values)
+            conn.commit()
+            st.success("Changes saved successfully.")
+        conn.close()
+    except Exception as e:
+        st.error(f"Error editing table: {e}")
+
 else:
-    st.info("Please log in to access the application.")
+    st.info("Select a table above to edit.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
