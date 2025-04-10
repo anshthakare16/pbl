@@ -283,8 +283,8 @@ if st.session_state["logged_in"]:
         sql_query = sql_query.replace("\n", " ").replace("\t", " ")
         return sql_query
 
-    
-    query_params = st.query_params
+    # Add shared query loading
+    query_params = st.query_params  # Updated: Replaced st.experimental_get_query_params with st.query_params
     shared_query = query_params.get("query", [None])[0]
 
     if shared_query:
@@ -365,7 +365,7 @@ SQL Query:
 
 st.subheader("💠 Edit Table Data (Write Access)")
 
-if selected_table:
+if selected_table:  # This will only be checked if selected_table is defined
     try:
         conn = sqlite3.connect(st.session_state[path_key])
         df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
