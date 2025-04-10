@@ -636,104 +636,105 @@ SQL Query:
     #############################################
     # 4) TABLE EDITOR SECTION                   #
     #############################################
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### ✏️ Table Editor")
-    st.markdown("View and edit your database table data.")
+    with tab3:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("### ✏️ Table Editor")
+        st.markdown("View and edit your database table data.")
 
-    # Check if a table is selected
-    if "selected_table" in st.session_state:
-        selected_table = st.session_state["selected_table"]
+        # Check if a table is selected
+        if "selected_table" in st.session_state:
+            selected_table = st.session_state["selected_table"]
 
-        # Button to display the table data
-        if st.button("👁️ Show Table Data", key="show_table"):
-            st.session_state["show_table_data"] = True
+            # Button to display the table data
+            if st.button("👁️ Show Table Data", key="show_table"):
+                st.session_state["show_table_data"] = True
 
-        # Add column section
-        add_col_expander = st.expander("Add a new column")
-        with add_col_expander:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                new_column_name = st.text_input("New column name:", key="new_column_name")
-            with col2:
-                col_type = st.selectbox("Type:", ["TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"])
+            # Add column section
+            add_col_expander = st.expander("Add a new column")
+            with add_col_expander:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    new_column_name = st.text_input("New column name:", key="new_column_name")
+                with col2:
+                    col_type = st.selectbox("Type:", ["TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"])
 
-            if st.button("➕ Add Column", key="add_column_btn"):
-                if new_column_name:
-                    try:
-                        # Connect to the database
-                        conn = sqlite3.connect(st.session_state[path_key])
-                        cursor = conn.cursor()
+                if st.button("➕ Add Column", key="add_column_btn"):
+                    if new_column_name:
+                        try:
+                            # Connect to the database
+                            conn = sqlite3.connect(st.session_state[path_key])
+                            cursor = conn.cursor()
 
-                        # Check if the column already exists
-                        cursor.execute(f"PRAGMA table_info({selected_table})")
-                        columns = cursor.fetchall()
-                        column_names = [col[1] for col in columns]
-
-                        if new_column_name in column_names:
-                            st.warning(f"Column '{new_column_name}' already exists.")
-                        else:
-                            # Add the new column
-                            cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN {new_column_name} {col_type}")
-                            conn.commit()
-
-                            # Update the schema
-                            db_schema_dict = st.session_state[schema_key]
+                            # Check if the column already exists
                             cursor.execute(f"PRAGMA table_info({selected_table})")
                             columns = cursor.fetchall()
-                            schema_str = f"Table: {selected_table}\n"
-                            for col in columns:
-                                schema_str += f"  - {col[1]} ({col[2]})\n"
-                            db_schema_dict[selected_table] = schema_str
-                            st.session_state[schema_key] = db_schema_dict
+                            column_names = [col[1] for col in columns]
 
-                            st.markdown("<div class='success-msg animated'>Column added successfully!</div>", 
+                            if new_column_name in column_names:
+                                st.warning(f"Column '{new_column_name}' already exists.")
+                            else:
+                                # Add the new column
+                                cursor.execute(f"ALTER TABLE {selected_table} ADD COLUMN {new_column_name} {col_type}")
+                                conn.commit()
+
+                                # Update the schema
+                                db_schema_dict = st.session_state[schema_key]
+                                cursor.execute(f"PRAGMA table_info({selected_table})")
+                                columns = cursor.fetchall()
+                                schema_str = f"Table: {selected_table}\n"
+                                for col in columns:
+                                    schema_str += f"  - {col[1]} ({col[2]})\n"
+                                db_schema_dict[selected_table] = schema_str
+                                st.session_state[schema_key] = db_schema_dict
+
+                                st.markdown("<div class='success-msg animated'>Column added successfully!</div>", 
+                                           unsafe_allow_html=True)
+                                st.session_state["show_table_data"] = True  # Show table after adding column
+                                st.rerun()  # Refresh the page to see the new column
+                        except Exception as e:
+                            st.error(f"Error adding column: {e}")
+                        finally:
+                            conn.close()
+                    else:
+                        st.warning("Please enter a column name.")
+
+            # Display table data if the button is clicked
+            if st.session_state.get("show_table_data", False):
+                try:
+                    # Connect to the database
+                    conn = sqlite3.connect(st.session_state[path_key])
+                    cursor = conn.cursor()
+
+                    # Fetch the table data
+                    df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
+                    st.dataframe(df_editable, use_container_width=True)
+
+                    # Editable DataFrame
+                    st.markdown("### ✏️ Edit Table Data")
+                    edited_df = st.data_editor(df_editable, num_rows="dynamic", use_container_width=True)
+
+                    # Save changes button
+                    if st.button("💾 Save Changes", key="save_changes_btn"):
+                        try:
+                            # Update each row in the table
+                            for _, row in edited_df.iterrows():
+                                # Construct the UPDATE query
+                                set_clause = ", ".join([f"{col} = ?" for col in row.index])
+                                where_clause = f"WHERE rowid = {row.name + 1}"  # Use rowid to identify the row
+                                update_query = f"UPDATE {selected_table} SET {set_clause} {where_clause}"
+                                
+                                # Execute the UPDATE query
+                                cursor.execute(update_query, tuple(row.values))
+
+                            conn.commit()
+                            st.markdown("<div class='success-msg animated'>Changes saved successfully!</div>", 
                                        unsafe_allow_html=True)
-                            st.session_state["show_table_data"] = True  # Show table after adding column
-                            st.rerun()  # Refresh the page to see the new column
-                    except Exception as e:
-                        st.error(f"Error adding column: {e}")
-                    finally:
-                        conn.close()
-                else:
-                    st.warning("Please enter a column name.")
-
-        # Display table data if the button is clicked
-        if st.session_state.get("show_table_data", False):
-            try:
-                # Connect to the database
-                conn = sqlite3.connect(st.session_state[path_key])
-                cursor = conn.cursor()
-
-                # Fetch the table data
-                df_editable = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
-                st.dataframe(df_editable, use_container_width=True)
-
-                # Editable DataFrame
-                st.markdown("### ✏️ Edit Table Data")
-                edited_df = st.data_editor(df_editable, num_rows="dynamic", use_container_width=True)
-
-                # Save changes button
-                if st.button("💾 Save Changes", key="save_changes_btn"):
-                    try:
-                        # Update each row in the table
-                        for _, row in edited_df.iterrows():
-                            # Construct the UPDATE query
-                            set_clause = ", ".join([f"{col} = ?" for col in row.index])
-                            where_clause = f"WHERE rowid = {row.name + 1}"  # Use rowid to identify the row
-                            update_query = f"UPDATE {selected_table} SET {set_clause} {where_clause}"
-                            
-                            # Execute the UPDATE query
-                            cursor.execute(update_query, tuple(row.values))
-
-                        conn.commit()
-                        st.markdown("<div class='success-msg animated'>Changes saved successfully!</div>", 
-                                   unsafe_allow_html=True)
-                    except Exception as e:
-                        st.error(f"Error saving changes: {e}")
-                    finally:
-                        conn.close()
-            except Exception as e:
-                st.error(f"Error loading table data: {e}")
+                        except Exception as e:
+                            st.error(f"Error saving changes: {e}")
+                        finally:
+                            conn.close()
+                except Exception as e:
+                    st.error(f"Error loading table data: {e}")
         else:
             st.info("Click 'Show Table Data' to view and edit the table.")
 
